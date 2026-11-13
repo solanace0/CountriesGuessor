@@ -184,7 +184,7 @@ const seg=(id,opts,val)=>`<div class="seg" id="${id}">${opts.map(o=>`<button dat
 const ICONS={play:'<polygon points="6 4 20 12 6 20"/>',user:'<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-7 8-7s8 3 8 7"/>',gift:'<rect x="3" y="9" width="18" height="12" rx="2"/><path d="M12 9v12M3 13h18M12 9C9 9 7 8 7 6s3-3 5 0c2-3 5-2 5 0s-2 3-5 3"/>',tag:'<path d="M3 12V4h8l10 10-8 8z"/><circle cx="7.5" cy="8.5" r="1.2"/>',chart:'<path d="M4 20V10M10 20V4M16 20v-8M22 20H2"/>',gear:'<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"/>',flag:'<path d="M5 21V4M5 4h12l-2 4 2 4H5"/>',back:'<path d="M15 5l-7 7 7 7"/>',sound:'<path d="M4 9v6h4l5 4V5L8 9z"/><path d="M16 9a4 4 0 010 6"/>',mute:'<path d="M4 9v6h4l5 4V5L8 9z"/><path d="M17 9l5 6M22 9l-5 6"/>',out:'<path d="M9 21H5V3h4M16 17l5-5-5-5M21 12H9"/>'};
 const ico=n=>`<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[n]}</svg>`;
 function head(){return `<div class="top"><div class="logo">Countries<b>Guessor</b></div><div class="row"><span class="chip">🪙 ${S.coins} Coins</span><button class="icb" id="snd" aria-label="Звук">${ico(SND.m?"sound":"mute")}</button></div></div>`}
-function go(v){cur=v;app.classList.remove("pg");void app.offsetWidth;app.classList.add("pg");clearInterval(T);clearTimeout(botT);app.onkeydown=null;olLeave(v);({friends:friendsUI,menu,setup,match:matchUI,boxes,coll,stats,settings,look:lookUI,quiz:quizMenu,qgame,omatch:omatchUI,owait:owaitUI})[v]();fixFigs()}
+function go(v){cur=v;app.classList.remove("pg");void app.offsetWidth;app.classList.add("pg");clearInterval(T);clearTimeout(botT);app.onkeydown=null;olLeave(v);({friends:friendsUI,menu,setup,match:matchUI,boxes,coll,stats,settings,look:lookUI,quiz:quizMenu,qgame,omatch:omatchUI,owait:owaitUI,cmatch:capUI,cwait:capLobbyUI})[v]();fixFigs()}
 /* ===== 3D: WebGL со сглаженным освещением; запасной программный рендер, если WebGL недоступен ===== */
 const nrm=v=>{const l=Math.hypot(v[0],v[1],v[2])||1;return[v[0]/l,v[1]/l,v[2]/l]};
 const sgn=(x,e)=>Math.sign(x)*Math.pow(Math.abs(x),e);
@@ -472,12 +472,13 @@ async function olBoot(nick){const sb=await olInit();const{data:{session}}=await 
 
 async function olStart(){const sb=OL.sb,uid=OL.uid;olTeardown(1);
   try{const t0=Date.now(),d=await olRpc("cg_server_time"),t1=Date.now();OL.off=new Date(d).getTime()-(t0+t1)/2}catch(e){OL.off=0}
-  sb.from("cg_profiles").update({look:S.look,title:S.active||null,last_seen:new Date().toISOString()}).eq("id",uid).then(()=>{});
+  sb.from("cg_profiles").update({look:S.look,title:S.active||null,prem:!!S.prem,last_seen:new Date().toISOString()}).eq("id",uid).then(()=>{});
   OL.pch=sb.channel("cg-online",{config:{presence:{key:uid}}});
   OL.pch.on("presence",{event:"sync"},()=>{const st=OL.pch.presenceState(),m=new Map();for(const k in st){const a=st[k]||[];m.set(k,(a[a.length-1]||{}).st||"on")}OL.online=m;if(cur==="friends")olFriendsRender()});
   OL.pch.subscribe(async s=>{if(s==="SUBSCRIBED")await OL.pch.track({st:cur==="omatch"||cur==="owait"?"game":"on"})});
   OL.uch=sb.channel("cg-user-"+uid)
     .on("postgres_changes",{event:"INSERT",schema:"public",table:"cg_matches",filter:"guest=eq."+uid},p=>olOnInvite(p.new))
+    .on("postgres_changes",{event:"INSERT",schema:"public",table:"cg_cap_matches",filter:"guest=eq."+uid},p=>capOnInvite(p.new))
     .on("postgres_changes",{event:"UPDATE",schema:"public",table:"cg_matches",filter:"guest=eq."+uid},p=>{const m=p.new;if(m.status!=="waiting"){const o=document.getElementById("inv-"+m.id);if(o)o.remove()}})
     .on("postgres_changes",{event:"*",schema:"public",table:"cg_friendships",filter:"addressee=eq."+uid},p=>olFrChanged(p))
     .on("postgres_changes",{event:"*",schema:"public",table:"cg_friendships",filter:"requester=eq."+uid},p=>olFrChanged(p))
@@ -492,7 +493,7 @@ function olShell(inner){app.innerHTML=head()+`<div class="card"><div class="row"
 async function olFriends(){olShell(`<p class="mut">Подключение к серверу…</p>`);
   if(!olUrl())return olSetupUI();
   try{if(!OL.uid){const ok=await olBoot();if(cur!=="friends")return;if(!ok)return olAuthUI(0)}
-    if(OL.sb&&OL.uid)OL.sb.from("cg_profiles").update({look:S.look,title:S.active||null,last_seen:new Date().toISOString()}).eq("id",OL.uid).then(()=>{});
+    if(OL.sb&&OL.uid)OL.sb.from("cg_profiles").update({look:S.look,title:S.active||null,prem:!!S.prem,last_seen:new Date().toISOString()}).eq("id",OL.uid).then(()=>{});
     await olFrLoad();if(cur!=="friends")return;olFriendsRender()}
   catch(e){if(cur==="friends")olFail(e)}}
 function olSetupUI(){olShell(`<p>Онлайн работает через ваш проект Supabase. Вставьте <b>Project URL</b> (Supabase → Project Settings → API).</p><input class="in" id="sbu" placeholder="https://abcdefgh.supabase.co" autocomplete="off"><p></p><button class="pri" id="sbs" style="width:100%">Сохранить и подключиться</button><p class="mut sm">Ключ уже вшит в игру. Секретный ключ (sb_secret_…) сюда вставлять нельзя.</p>`);
@@ -512,7 +513,7 @@ function olAuthUI(reg){olShell(`<div class="seg" id="otb"><button data-v="0" cla
 
 async function olFrLoad(){const sb=OL.sb,uid=OL.uid;const{data:rows,error}=await sb.from("cg_friendships").select("id,requester,addressee,status,created_at");if(error)throw error;
   const ids=[...new Set((rows||[]).flatMap(r=>[r.requester,r.addressee]).filter(i=>i!==uid))];OL.pm={};
-  if(ids.length){const{data:ps,error:e2}=await sb.from("cg_profiles").select("id,username,look,title,last_seen").in("id",ids);if(e2)throw e2;(ps||[]).forEach(p=>OL.pm[p.id]=p)}
+  if(ids.length){const{data:ps,error:e2}=await sb.from("cg_profiles").select("id,username,look,title,last_seen,prem").in("id",ids);if(e2)throw e2;(ps||[]).forEach(p=>OL.pm[p.id]=p)}
   OL.fr=rows||[];const{data:act}=await sb.from("cg_matches").select("id,mode,host,guest,status").eq("status","playing").limit(1);OL.active=act&&act[0]||null}
 async function olFrChanged(p){try{if(p&&p.eventType==="INSERT"&&p.new&&p.new.status==="pending"&&p.new.addressee===OL.uid){toast("🔔 Новая заявка в друзья");play("turn")}
   else if(p&&p.eventType==="UPDATE"&&p.new&&p.new.status==="accepted"){toast("🤝 Заявка принята")}
@@ -528,9 +529,10 @@ function olFriendsRender(){if(cur!=="friends"||!OL.uid)return;
 <p class="mut sm">Онлайн-аккаунт: <b>${html(OL.prof.username)}</b>${titleStr()} · монеты, титулы и статистика хранятся в этом браузере</p><button class="back" data-ol="out">Выйти из онлайна</button></div>
 ${OL.active?`<div class="card gift"><div><b>У вас идёт матч</b><p class="mut sm">Можно вернуться, пока не вышло время хода.</p></div><button class="pri" data-ol="resume" data-id="${html(OL.active.id)}">Вернуться</button></div>`:""}
 <div class="card"><h3>Матч онлайн</h3><p class="mut sm">Режим</p>${sg("mode",[["countries","Countries"],["cities","Cities"],["mixed","Mixed"]],cfg.mode)}<p class="mut sm">Таймер</p>${sg("timed",[["1","Timed: 120 / 60 / 30 с"],["0","Без лимита"]],cfg.timed)}<p></p><button class="pri" data-ol="quick" style="width:100%">Найти соперника</button></div>
+<div class="card"><h3>🏛️ Столицы</h3><p class="mut sm">Флаг на экране: кто первым назовёт столицу, тот выигрывает раунд. Неверный ответ отнимает ❤️. Раунд — 2 минуты.</p>${sg("cdiff",[["easy","Легко · 10 ❤️"],["normal","Нормально · 5 ❤️"],["hard","Сложно · 3 ❤️"]],OL.cd||"normal")}<p></p><button class="pri" data-ol="cquick" style="width:100%">Найти соперника</button></div>
 ${inc.length?`<div class="card"><h3>Заявки в друзья</h3>${inc.map(r=>`<div class="olr"><div class="sp"><b>${html(pf(r).username)}</b>${ttlS(pf(r))}</div><button class="pri" data-ol="acc" data-id="${r.id}">Принять</button><button data-ol="dec" data-id="${r.id}">Отклонить</button></div>`).join("")}</div>`:""}
 <div class="card"><h3>Друзья</h3><div class="row"><input class="in sp" id="oladd" maxlength="20" placeholder="Ник игрока" autocomplete="off" value="${html(OL.addv)}"><button class="pri" data-ol="add">Добавить</button></div>
-${fl.length?fl.map(({r,p})=>{const s=OL.online.get(p.id),c=s==="game"?"g":s?"on":"",t=s==="game"?"в игре":s?"в сети":"не в сети";return`<div class="olr"><span class="dot ${c}"></span><div class="sp"><b>${html(p.username)}</b>${ttlS(p)}<div class="mut sm">${t}</div></div><button data-ol="inv" data-id="${html(p.id)}" ${s==="on"?"":"disabled"}>Играть</button><button class="icb" data-ol="rm" data-id="${r.id}" aria-label="Удалить из друзей" title="Удалить из друзей">✕</button></div>`}).join(""):`<p class="mut sm">Пока никого. Добавьте друга по нику: он увидит заявку сразу.</p>`}
+${fl.length?fl.map(({r,p})=>{const s=OL.online.get(p.id),c=s==="game"?"g":s?"on":"",t=s==="game"?"в игре":s?"в сети":"не в сети";return`<div class="olr"><span class="dot ${c}"></span><div class="sp"><b>${pnick(p.username,p.prem)}</b>${ttlS(p)}<div class="mut sm">${t}</div></div><button data-ol="inv" data-id="${html(p.id)}" ${s==="on"?"":"disabled"}>Игра слов</button><button data-ol="cinv" data-id="${html(p.id)}" ${s==="on"?"":"disabled"}>Столицы</button><button class="icb" data-ol="rm" data-id="${r.id}" aria-label="Удалить из друзей" title="Удалить из друзей">✕</button></div>`}).join(""):`<p class="mut sm">Пока никого. Добавьте друга по нику: он увидит заявку сразу.</p>`}
 ${out.length?`<p class="mut sm" style="margin-top:12px">Отправленные заявки</p>${out.map(r=>`<div class="olr"><div class="sp"><b>${html(pf(r).username)}</b><div class="mut sm">ждёт ответа</div></div><button data-ol="rm" data-id="${r.id}">Отозвать</button></div>`).join("")}`:""}</div>`;
   if(hadFocus){const i=$("#oladd");if(i){i.focus();i.setSelectionRange(i.value.length,i.value.length)}}}
 
@@ -548,6 +550,11 @@ app.addEventListener("click",async e=>{const b=e.target.closest("[data-ol]");if(
     else if(a==="resume")await olOpenMatch(id);
     else if(a==="cancel"){const om=OL.om;if(om)try{await olRpc("cg_cancel_match",{p_id:om.id})}catch(x){}go("friends")}
     else if(a==="out"){await olSignOut();go("friends")}
+    else if(a==="cdiff"){OL.cd=b.dataset.v;olFriendsRender()}
+    else if(a==="cquick")await capQuick();
+    else if(a==="cinv")await capInvite(id);
+    else if(a==="cset"){await olRpc("cg_cap_set",{p_id:CAP.m.id,p_diff:b.dataset.v});await capPull()}
+    else if(a==="ccancel")await capLeave();
     else if(a==="retry")olFriends();
     else if(a==="url"){LS.s("sburl","");OL.sb=null;olFriends()}
   }catch(err){toast(olErr(err),1)}});
@@ -569,7 +576,7 @@ async function olQuick(){const id=await olRpc("cg_find_match",{p_mode:cfg.mode,p
 async function olInvite(fid){const id=await olRpc("cg_invite",{p_friend:fid,p_mode:cfg.mode,p_timed:cfg.timed==="1"});await olOpenMatch(id)}
 
 /* ---------- синхронизация матча ---------- */
-async function olOpp(om){let p=OL.pm[om.oppId]||null;if(!p&&om.oppId){try{({data:p}=await OL.sb.from("cg_profiles").select("id,username,look,title").eq("id",om.oppId).maybeSingle())}catch(e){}}om.opp=p||{username:"Соперник"}}
+async function olOpp(om){let p=OL.pm[om.oppId]||null;if(!p&&om.oppId){try{({data:p}=await OL.sb.from("cg_profiles").select("id,username,look,title,prem").eq("id",om.oppId).maybeSingle())}catch(e){}}om.opp=p||{username:"Соперник"}}
 async function olOpenMatch(id){olUnwatch();const sb=OL.sb,om=OL.om={id,row:null,ch:null,poll:0,done:0,claim:0,lock:0,lastEmo:0,q:Promise.resolve(),oppId:null,opp:null,meHost:false};
   const ch=sb.channel("cg-m-"+id);
   ch.on("postgres_changes",{event:"UPDATE",schema:"public",table:"cg_matches",filter:"id=eq."+id},p=>olApply(p.new))
@@ -581,7 +588,7 @@ async function olOpenMatch(id){olUnwatch();const sb=OL.sb,om=OL.om={id,row:null,
 const EMO12=["👍","👎","😀","😢","😭","😂","😮","😡","❤️","👏","😱","🤔","😅"];
 function olUnwatch(){const om=OL.om;if(!om)return;OL.om=null;clearInterval(om.poll);if(om.ch&&OL.sb)try{OL.sb.removeChannel(om.ch)}catch(e){}
   if(om.row&&om.row.status==="waiting"&&om.row.host===OL.uid&&OL.sb)OL.sb.rpc("cg_cancel_match",{p_id:om.id}).then(()=>{},()=>{})}
-function olLeave(v){if(OL.om&&v!=="omatch"&&v!=="owait")olUnwatch();olSetSt(v==="omatch"||v==="owait"?"game":"on")}
+function olLeave(v){if(CAP.m&&v!=="cmatch"&&v!=="cwait")capUnwatch();if(OL.om&&v!=="omatch"&&v!=="owait")olUnwatch();olSetSt(v==="omatch"||v==="owait"?"game":"on")}
 async function olPull(){const om=OL.om;if(!om)return;try{const{data}=await OL.sb.from("cg_matches").select("*").eq("id",om.id).maybeSingle();if(data&&OL.om===om)olApply(data)}catch(e){}}
 function olApply(r){const om=OL.om;if(!om||om.id!==r.id)return;om.q=om.q.then(()=>olApplyNow(r)).catch(()=>{})}
 async function olApplyNow(r){const om=OL.om;if(!om||om.id!==r.id)return;const prev=om.row,rk=x=>x.status==="waiting"?0:x.status==="playing"?1:2;
@@ -599,7 +606,7 @@ function owaitUI(){const om=OL.om;if(!om||!om.row){go("friends");return}const in
   T=setInterval(()=>{if(!OL.om||OL.om!==om||cur!=="owait")return;if(olNow()-Date.parse(om.row.created_at)>(inv?9:1.5)*60e3){toast(inv?"Друг не ответил":"Соперник не найден, попробуйте ещё раз",1);go("friends")}},1000)}
 
 function oscene(){const om=OL.om,st=S.st,op=om.opp||{username:"Соперник"},ol=olLook(op.look)||botLook(),ot=op.title&&TITLES.some(t=>t.n===op.title)?" "+ttl(op.title):"";
-  return `<div style="position:relative"><div class="stage" role="img" aria-label="Вы и соперник"><canvas class="bgc" data-bg="1"></canvas><div class="pq" style="left:0"><span><b>${html(OL.prof.username)}</b>${titleStr()}</span><span class="rec"><i class="win">${st.w}</i><i>${st.g}</i><i class="lose">${st.l}</i></span></div><div class="pq" style="right:0"><span><b>${html(op.username)}</b>${ot}</span></div>${fig("pl",S.look)}${fig("bt",ol)}</div><div id="fx"></div></div>`}
+  return `<div style="position:relative"><div class="stage" role="img" aria-label="Вы и соперник"><canvas class="bgc" data-bg="1"></canvas><div class="pq" style="left:0"><span><b>${capMe()}</b>${titleStr()}</span><span class="rec"><i class="win">${st.w}</i><i>${st.g}</i><i class="lose">${st.l}</i></span></div><div class="pq" style="right:0"><span><b>${pnick(op.username,op.prem)}</b>${ot}</span></div>${fig("pl",S.look)}${fig("bt",ol)}</div><div id="fx"></div></div>`}
 function omatchUI(){const om=OL.om;if(!om||!om.row){go("friends");return}
   app.innerHTML=head()+oscene()+`<div class="card" style="margin-top:10px"><div class="row"><span class="mut sm">Нужная буква</span><span class="letter" id="ltr">★</span><span class="sp"></span><span class="chip" id="who"></span></div><div class="bar" style="margin:10px 0"><i id="tb" style="width:100%"></i></div><div id="last" class="ans mut">Первый ответ — любая буква</div><p></p><div class="row"><input class="in sp" id="inp" placeholder="Введите название…" autocomplete="off" enterkeyhint="send"><button class="pri" id="send">Ответить</button></div><p class="mut sm" id="cnt"></p><div class="emo" id="emo">${["👍","👎","😀","😢","😭","😂","😮","😡","❤️","👏","😱","🤔"].map(e=>`<button data-e="${e}" aria-label="реакция ${e}">${e}</button>`).join("")}</div><p></p><button id="quit">Сдаться и выйти</button></div>`;
   $("#send").onclick=osubmit;$("#inp").onkeydown=e=>{if(e.key==="Enter")osubmit()};
@@ -641,6 +648,123 @@ function olEnd(r){const om=OL.om;if(!om||om.done)return;om.done=1;clearInterval(
   const why={timeout:win?"у соперника вышло время":"время вышло",exhausted:"ответов больше нет",left:win?"соперник вышел из матча":"выход из матча"}[r.reason]||"";
   const ov=document.createElement("div");ov.className="ov";ov.innerHTML=`<div class="card"><div class="big ${win?"win":"lose"}">${win?"Победа!":"Поражение"}</div><p class="mut">Причина: ${html(why)}</p><p>Ходов: ${total} · ваши ответы: ${mine}</p>${win?`<p class="win">+10 Coins</p>`:""}<div class="row"><button id="oe1" class="pri sp">К друзьям</button><button id="oe2">В меню</button></div></div>`;document.body.append(ov);
   $("#oe1").onclick=()=>{ov.remove();go("friends")};$("#oe2").onclick=()=>{ov.remove();go("menu")}}
+
+/* ===== СТОЛИЦЫ (онлайн): флаг -> столица, победителя и сердца определяет сервер ===== */
+const CAPD={easy:["Легко",10],normal:["Нормально",5],hard:["Сложно",3]};
+const CAP={m:null};
+const capCSS=document.createElement("style");capCSS.textContent=".hp{display:flex;flex-wrap:wrap;gap:2px;font-size:.95rem;line-height:1;margin-top:4px}.hp i{font-style:normal;transition:opacity .25s,filter .25s}.hp i.lost{opacity:.3;filter:grayscale(1)}.hp i.pop{animation:hpop .55s}@keyframes hpop{30%{transform:scale(1.7) rotate(-14deg)}100%{transform:scale(1)}}.cfl{min-height:150px;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:6px}.cfl img{max-width:min(78vw,300px);border-radius:10px;box-shadow:0 6px 24px rgba(0,0,0,.5);animation:cfin .35s ease-out}@keyframes cfin{from{opacity:0;transform:translateY(8px) scale(.96)}}.cnum{font-size:3rem;font-weight:800;animation:cfin .3s}.cres{animation:cfin .3s;text-align:center}.cres img{max-width:140px}.hmsh{animation:hsh .4s}@keyframes hsh{25%{transform:translateX(-5px)}75%{transform:translateX(5px)}}#ctb.low{background:var(--bad)}@media(prefers-reduced-motion:reduce){.cfl img,.cnum,.cres,.hp i.pop,.hmsh{animation:none}}";document.head.append(capCSS);
+const capName=iso=>{const e=QPOOL().find(x=>x.k===iso);return e?e.n:iso};
+const capHearts=(n,max,pop)=>Array.from({length:max},(_,i)=>`<i class="${i>=n?"lost":""}${pop&&i===n?" pop":""}">${i>=n?"🖤":"❤️"}</i>`).join("");
+async function capQuick(){capOpen(await olRpc("cg_cap_find",{p_diff:OL.cd||"normal"}))}
+async function capInvite(fid){capOpen(await olRpc("cg_cap_invite",{p_friend:fid,p_diff:OL.cd||"normal"}))}
+async function capOpen(id){capUnwatch();const sb=OL.sb,c=CAP.m={id,row:null,ch:null,poll:0,opp:null,oppId:null,meHost:false,claim:0,lock:0,done:0,rd:-1,q:Promise.resolve()};
+  const ch=sb.channel("cg-c-"+id);ch.on("postgres_changes",{event:"UPDATE",schema:"public",table:"cg_cap_matches",filter:"id=eq."+id},p=>capApply(p.new)).on("broadcast",{event:"emo"},p=>{const d=p.payload||{};if(CAP.m===c&&d.from!==OL.uid&&EMO12.includes(d.e))oemote(d.e,"bt")});c.ch=ch;
+  await new Promise(ok=>{let d=0;const f=()=>{if(!d){d=1;ok()}};ch.subscribe(s=>{if(s==="SUBSCRIBED")f()});setTimeout(f,4000)});
+  const{data,error}=await sb.from("cg_cap_matches").select("*").eq("id",id).maybeSingle();
+  if(error||!data){capUnwatch();throw error||new Error("Матч не найден")}
+  c.meHost=data.host===OL.uid;c.poll=setInterval(capPull,1500);capApply(data)}
+function capUnwatch(){const c=CAP.m;if(!c)return;CAP.m=null;clearInterval(c.poll);if(c.ch&&OL.sb)try{OL.sb.removeChannel(c.ch)}catch(e){}
+  if(c.row&&(c.row.status==="waiting"||c.row.status==="lobby")&&OL.sb)OL.sb.rpc("cg_cap_resign",{p_id:c.id}).then(()=>{},()=>{})}
+async function capPull(){const c=CAP.m;if(!c)return;try{const{data}=await OL.sb.from("cg_cap_matches").select("*").eq("id",c.id).maybeSingle();if(data&&CAP.m===c)capApply(data)}catch(e){}}
+function capApply(r){const c=CAP.m;if(!c||c.id!==r.id)return;c.q=c.q.then(()=>capApplyNow(r)).catch(()=>{})}
+async function capApplyNow(r){const c=CAP.m;if(!c||c.id!==r.id)return;const prev=c.row;if(prev&&r.ver<=prev.ver)return;
+  const oid=r.host===OL.uid?r.guest:r.host;
+  if(oid&&oid!==c.oppId){c.oppId=oid;c.opp=null;try{const{data}=await OL.sb.from("cg_profiles").select("id,username,look,title,prem").eq("id",oid).maybeSingle();c.opp=data}catch(e){}if(!c.opp)c.opp={username:"Соперник"};if(CAP.m!==c)return}
+  c.row=r;c.claim=0;
+  if(r.status==="waiting"||r.status==="lobby"){if(cur!=="cwait")go("cwait");else capLobbyRefresh();return}
+  if(r.status==="playing"){if(cur!=="cmatch")go("cmatch");else capRefresh(prev);return}
+  if(r.status==="finished"){if(cur!=="cmatch")go("cmatch");else capRefresh(prev);capEnd(r);return}
+  toast(r.status==="declined"?"Соперник отклонил приглашение":r.reason==="left"?"Соперник вышел из комнаты":"Поиск отменён",r.status!=="cancelled"||r.reason==="left");go("friends")}
+function capUI(){const c=CAP.m;if(!c||!c.row){go("friends");return}const r=c.row,op=c.opp||{username:"Соперник"},ol=olLook(op.look)||botLook(),me=window.__nk?window.__nk(OL.prof.username):html(OL.prof.username);
+  app.innerHTML=head()+`<div class="card" style="padding:12px"><div class="row"><b>🏛️ Столицы</b><span class="chip">${CAPD[r.diff][0]}</span><span class="sp"></span><span class="chip" id="ctm">2:00</span></div><div class="bar" style="margin:8px 0"><i id="ctb" style="width:100%"></i></div><div class="row" style="align-items:flex-start"><div class="sp"><b>${me}</b><div class="hp" id="hm"></div></div><div class="sp" style="text-align:right"><b>${pnick(op.username,op.prem)}</b><div class="hp" id="ho" style="justify-content:flex-end"></div></div></div></div>
+<div style="position:relative"><div class="stage" role="img" aria-label="Вы и соперник"><canvas class="bgc" data-bg="1"></canvas>${fig("pl",S.look)}${fig("bt",ol)}</div><div id="fx"></div></div>
+<div class="card" style="text-align:center;margin-top:10px"><div class="cfl" id="cfl"></div><p class="mut sm" id="cst" style="min-height:1.2em"></p><div class="row"><input class="in sp" id="cinp" placeholder="Столица…" autocomplete="off" enterkeyhint="send" disabled><button class="pri" id="csend" disabled>Ответить</button></div><p></p><div class="row"><button class="sp" id="cskip" disabled>Не знаю ответ (-1 heart)</button><button id="cquit" class="back">Сдаться</button></div><div class="emo" id="emo" style="margin-top:8px">${EMO12.slice(0,12).map(e=>`<button data-e="${e}" aria-label="реакция ${e}">${e}</button>`).join("")}</div></div>`;
+  $("#csend").onclick=capSend;$("#cinp").onkeydown=e=>{if(e.key==="Enter")capSend()};$("#cskip").onclick=capSkip;$("#emo").onclick=capEmo;
+  $("#cquit").onclick=async()=>{const k=CAP.m;if(!k)return go("friends");if(k.row.status==="playing"){try{await olRpc("cg_cap_resign",{p_id:k.id});await capPull()}catch(e){toast(olErr(e),1)}}else go("friends")};
+  capRefresh(null);T=setInterval(captick,200)}
+function capRefresh(prev){const c=CAP.m;if(!c||cur!=="cmatch")return;const r=c.row,max=CAPD[r.diff][1],mh=c.meHost?r.hh:r.gh,oh=c.meHost?r.gh:r.hh,pm=prev?(c.meHost?prev.hh:prev.gh):mh,po=prev?(c.meHost?prev.gh:prev.hh):oh;
+  const hm=$("#hm");if(!hm)return;hm.innerHTML=capHearts(mh,max,mh<pm);$("#ho").innerHTML=capHearts(oh,max,oh<po);
+  if(mh<pm){play("wrong");hm.classList.remove("hmsh");void hm.offsetWidth;hm.classList.add("hmsh")}
+  if(prev&&r.round>prev.round&&r.res&&r.res.type==="win"){const mine=r.res.by===OL.uid,w=$(mine?"#pl":"#bt");if(w){w.classList.add("raise","happy");setTimeout(()=>w.classList.remove("raise","happy"),1300)}
+    if(mine){play("correct");confetti()}else play("wrong")}
+  if(prev&&r.round>prev.round&&r.res&&r.res.type==="skip")play("turn");
+  captick()}
+function captick(){const c=CAP.m;if(!c||cur!=="cmatch"||!c.row||c.row.status!=="playing"&&c.row.status!=="finished")return;const r=c.row,rs=Date.parse(r.round_start)-olNow(),rem=Date.parse(r.deadline)-olNow(),live=r.status==="playing"&&rs<=0;
+  const tm=$("#ctm"),tb=$("#ctb");if(!tm)return;const s=Math.max(0,Math.ceil(Math.min(rem,120000)/1000));tm.textContent=live?Math.floor(s/60)+":"+String(s%60).padStart(2,"0"):"2:00";
+  tb.style.width=live?Math.max(0,Math.min(100,rem/1200))+"%":"100%";tb.classList.toggle("low",live&&rem<15000);
+  const fl=$("#cfl");const key=live?"f"+r.round:(r.res&&r.res.round===r.round-1?"r"+r.round:"c"+r.round);
+  if(r.status==="playing"&&c.shown!==key+(live?"":Math.ceil(rs/1000))){c.shown=key+(live?"":Math.ceil(rs/1000));
+    if(live)fl.innerHTML=fimg(r.iso,"qbig");
+    else{const x=r.res&&r.res.round===r.round-1?r.res:null,n=Math.max(1,Math.ceil(rs/1000));
+      fl.innerHTML=x?`<div class="cres">${fimg(x.iso,"ifl")}<div><b>${html(x.cap)}</b> · ${html(capName(x.iso))}</div><div class="mut sm">${x.type==="win"?(x.by===OL.uid?"🎉 Вы ответили первым!":html((c.opp||{}).username||"Соперник")+" ответил первым"):x.type==="skip"?"Пропуск: оба теряют ❤️":"Время вышло"}</div><div class="cnum">${n}</div></div>`:`<div class="mut">Старт через</div><div class="cnum">${n}</div>`}}
+  const my=c.meHost?r.skip_h:r.skip_g,op=c.meHost?r.skip_g:r.skip_h,i=$("#cinp"),sk=$("#cskip");
+  i.disabled=!live;$("#csend").disabled=!live;sk.disabled=!live||my;sk.textContent=my?"Ждём соперника…":"Не знаю ответ (-1 heart)";sk.classList.toggle("pri",!!op&&!my);
+  $("#cst").textContent=!live?"":my?"Пропуск: ждём согласия соперника":op?"Соперник хочет пропустить — нажмите «Не знаю ответ»":"";
+  if(live&&c.focus!==r.round){c.focus=r.round;i.value="";i.focus()}
+  if(live&&rem<=0&&!c.claim){c.claim=1;olRpc("cg_cap_tick",{p_id:c.id}).then(d=>{if(d==="early")setTimeout(()=>{if(CAP.m===c)c.claim=0},1200);else capPull()}).catch(()=>setTimeout(()=>{if(CAP.m===c)c.claim=0},2500))}}
+async function capSend(){const c=CAP.m;if(!c||c.lock||cur!=="cmatch")return;const r=c.row,i=$("#cinp"),v=i.value.trim();if(!v||r.status!=="playing"||Date.parse(r.round_start)>olNow())return;c.lock=1;
+  try{const d=await olRpc("cg_cap_answer",{p_id:c.id,p_round:r.round,p_text:v});if(d==="wrong"){toast("Неверно! −1 ❤️",1);i.classList.remove("shake");void i.offsetWidth;i.classList.add("shake");i.select()}else if(d==="correct")i.value="";await capPull()}
+  catch(e){toast(olErr(e),1)}finally{c.lock=0}}
+async function capSkip(){const c=CAP.m;if(!c||c.lock)return;c.lock=1;try{await olRpc("cg_cap_skip",{p_id:c.id,p_round:c.row.round});play("click");await capPull()}catch(e){toast(olErr(e),1)}finally{c.lock=0}}
+const pnick=(n,p)=>p?`<span class="pn pn-w"><i class="pc">👑</i>${html(n)}</span>`:html(n);
+const capMe=()=>S.prem&&window.__nk?window.__nk(OL.prof.username):html(OL.prof.username);
+const cap2CSS=document.createElement("style");cap2CSS.textContent=`
+.stage{background:none!important;border:0!important;box-shadow:none!important;overflow:visible!important;border-radius:0!important}.bgc{display:none!important}
+.stage .fg,.lbp .fg{position:relative;overflow:visible!important}
+.stage .fg::before,.lbp .fg::before{content:"";position:absolute;left:50%;bottom:-16px;width:112%;height:30px;transform:translateX(-50%);border-radius:50%;background:radial-gradient(closest-side,color-mix(in srgb,var(--ac) 50%,transparent),rgba(255,255,255,.06) 66%,transparent 72%);z-index:0;pointer-events:none}
+.stage .fg::after,.lbp .fg::after{content:"";position:absolute;left:50%;bottom:-13px;width:96%;height:24px;transform:translateX(-50%);border-radius:50%;border:1.5px solid rgba(255,255,255,.28);box-shadow:0 0 14px color-mix(in srgb,var(--ac) 45%,transparent);z-index:0;pointer-events:none}
+.stage .fg canvas{position:relative;z-index:1}
+.lob .lobst{display:flex;justify-content:space-around;align-items:flex-end;padding:44px 0 36px;min-height:320px}
+.lbp{position:relative;width:46%;max-width:240px;display:flex;flex-direction:column;align-items:center;gap:6px}.lbp .fg{width:100%}
+.lbn{position:absolute;top:-34px;left:0;right:0;text-align:center;font-weight:700;font-size:.95rem;animation:lnd .6s .25s both}.lbr{margin-top:30px;font-size:.8rem;padding:.15rem .8rem;border-radius:99px;background:#ffffff14;transition:all .25s}.lbr.ok{background:#22c55e33;color:#7ff0a7}
+.lp1{animation:lin1 .7s cubic-bezier(.2,.8,.2,1) both}.lp2{animation:lin2 .7s .12s cubic-bezier(.2,.8,.2,1) both}
+@keyframes lin1{from{opacity:0;transform:translateX(-70px) scale(.92)}}@keyframes lin2{from{opacity:0;transform:translateX(70px) scale(.92)}}@keyframes lnd{from{opacity:0;transform:translateY(-10px)}}
+.lbp .slot{aspect-ratio:3/5;display:flex;align-items:center;justify-content:center;font-size:3rem;opacity:.35;animation:slp 1.6s ease-in-out infinite}@keyframes slp{50%{opacity:.6;transform:scale(1.04)}}
+.optg{display:grid;grid-template-columns:repeat(auto-fit,minmax(96px,1fr));gap:8px;margin:6px 0 10px}.opt{display:flex;flex-direction:column;align-items:center;gap:2px;padding:10px 6px;border-radius:14px;border:1px solid var(--line);background:var(--s2);color:inherit;transition:transform .15s,border-color .2s,background .2s}.opt small{opacity:.65;font-size:.72rem;text-align:center}.opt.on{border-color:var(--ac);background:color-mix(in srgb,var(--ac) 18%,var(--s2))}.opt:active{transform:scale(.96)}.opt:disabled{opacity:.7}
+.rep{position:fixed;inset:0;z-index:60;overflow:auto;background:rgba(8,8,11,.97);padding:max(14px,env(safe-area-inset-top)) 12px max(24px,env(safe-area-inset-bottom));animation:cfin .35s}.rep>div{max-width:540px;margin:0 auto}
+.rban{text-align:center;padding:22px 12px;border-radius:22px;background:radial-gradient(120% 140% at 50% 0%,color-mix(in srgb,var(--rc) 35%,#15151b),#15151b 70%);border:1px solid color-mix(in srgb,var(--rc) 45%,transparent)}.rban h1{margin:0;font-size:2.2rem;letter-spacing:.06em;color:var(--rc)}
+.rpl{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:12px 0}.rpc{background:var(--s1);border:1px solid var(--line);border-radius:18px;padding:12px;text-align:center}.rpc.w{border-color:#ffd166}.rsc{font-size:2.4rem;font-weight:800;line-height:1.1}
+.rst{background:var(--s1);border:1px solid var(--line);border-radius:18px;padding:10px 12px;margin-bottom:12px}.rsr{display:grid;grid-template-columns:48px 1fr 48px;gap:8px;align-items:center;padding:6px 0;font-size:.85rem}.rsr b{text-align:center}.rbr{height:7px;border-radius:9px;background:#ffffff12;overflow:hidden;display:flex}.rbr i{display:block;height:100%;background:var(--ac);transition:width .8s}.rbr i+i{background:#ffffff55}
+.rrow{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:14px;background:var(--s1);border:1px solid var(--line);margin-bottom:6px;animation:cfin .4s both;animation-delay:calc(var(--i)*55ms)}.rrow img{width:54px;border-radius:5px;flex:none}.rrow .sp{min-width:0}.rch{font-size:.75rem;padding:.15rem .6rem;border-radius:99px;white-space:nowrap}.rch.g{background:#22c55e26;color:#7ff0a7}.rch.b{background:#ef444426;color:#ff9a9a}.rch.n{background:#ffffff14}
+@media(prefers-reduced-motion:reduce){.lp1,.lp2,.lbn,.rep,.rrow,.lbp .slot{animation:none}}`;document.head.append(cap2CSS);
+function capStageHTML(){const c=CAP.m,op=c.opp,ol=op&&olLook(op.look)||botLook(),ot=op&&op.title&&TITLES.some(t=>t.n===op.title)?" "+ttl(op.title):"";
+  return `<div class="lbp lp1"><div class="lbn">${capMe()}${titleStr()}</div>${fig("pl",S.look)}<div class="lbr" id="rm"></div></div>`+
+   (c.oppId&&op?`<div class="lbp lp2"><div class="lbn">${pnick(op.username,op.prem)}${ot}</div>${fig("bt",ol)}<div class="lbr" id="ro"></div></div>`:`<div class="lbp lp2"><div class="lbn mut">Ждём игрока…</div><div class="fg slot">👤</div><div class="lbr" id="ro"></div></div>`)}
+function capLobbyUI(){const c=CAP.m;if(!c||!c.row){go("friends");return}
+  app.innerHTML=head()+`<div class="lob"><div class="card" style="padding:12px"><div class="row"><b>🏛️ Комната · Столицы</b><span class="sp"></span><span class="chip" id="lst"></span></div></div><div style="position:relative"><div class="stage lobst" id="lbst">${capStageHTML()}</div><div id="fx"></div></div><div class="card" id="lbs"></div><div class="card"><div class="emo" id="emo">${EMO12.slice(0,12).map(e=>`<button data-e="${e}" aria-label="реакция ${e}">${e}</button>`).join("")}</div></div></div>`;
+  c.lobOpp=c.oppId||"";$("#emo").onclick=capEmo;capLobbyRefresh();
+  T=setInterval(()=>{if(CAP.m!==c||cur!=="cwait")return;if(!c.row.guest&&olNow()-Date.parse(c.row.created_at)>(c.row.invited?9:4.5)*60e3){toast("Соперник не найден",1);capLeave()}},1000)}
+function capLobbyRefresh(){const c=CAP.m;if(!c||cur!=="cwait"||!c.row)return;const r=c.row,host=c.meHost,have=!!r.guest&&!!c.oppId;
+  if(c.lobOpp!==(c.oppId||"")){c.lobOpp=c.oppId||"";$("#lbst").innerHTML=capStageHTML();fixFigs()}
+  const mr=host?r.rh:r.rg,or=host?r.rg:r.rh,set=(id,ok,txt)=>{const e=$(id);if(e){e.className="lbr"+(ok?" ok":"");e.textContent=txt}};
+  set("#rm",mr,mr?"✓ Готов":"Не готов");set("#ro",have&&or,have?(or?"✓ Готов":"Не готов"):"");
+  $("#lst").textContent=have?"● Соперник в комнате":"○ Ждём соперника";
+  $("#lbs").innerHTML=`<h3 style="margin:0 0 6px">Режим</h3><div class="optg"><button class="opt on" disabled>🏛️<b>Столицы</b><small>Флаг → столица. Раунд 2 минуты</small></button></div><h3 style="margin:0 0 6px">Сложность</h3><div class="optg">${Object.entries(CAPD).map(([k,v])=>`<button class="opt ${r.diff===k?"on":""}" data-ol="cset" data-v="${k}" ${host?"":"disabled"}><b>${v[0]}</b><small>${v[1]} ❤️ каждому</small></button>`).join("")}</div><p class="mut sm">${host?"Вы выбираете настройки. При смене готовность сбрасывается.":"Настройки выбирает хозяин комнаты."} Победитель определяется на сервере.</p><div class="row"><button class="pri sp" id="lrdy" ${have?"":"disabled"}>${mr?"Отменить готовность":"Готов"}</button><button id="llv">Выйти</button></div>`;
+  $("#lrdy").onclick=async()=>{try{await olRpc("cg_cap_ready",{p_id:c.id,p_ready:!mr});play("click");await capPull()}catch(e){toast(olErr(e),1)}};$("#llv").onclick=capLeave}
+async function capLeave(){const k=CAP.m;if(k)try{await olRpc("cg_cap_resign",{p_id:k.id})}catch(e){}go("friends")}
+function capEmo(e){const b=e.target.closest("button"),c=CAP.m;if(!b||!c)return;const n=Date.now();if(n-(c.lastEmo||0)<700)return;c.lastEmo=n;oemote(b.dataset.e,"pl");try{c.ch.send({type:"broadcast",event:"emo",payload:{e:b.dataset.e,from:OL.uid}})}catch(x){}}
+function capEnd(r){const c=CAP.m;if(!c||c.done)return;c.done=1;clearInterval(T);clearInterval(c.poll);const draw=!r.winner,win=r.winner===OL.uid,host=c.meHost,op=c.opp||{username:"Соперник"};
+  play(draw?"turn":win?"win":"lose");if(win)confetti();
+  const rounds=(r.hist||[]).slice();if(r.res&&!rounds.some(x=>x.round===r.res.round))rounds.push(r.res);
+  const mw=rounds.filter(x=>x.type==="win"&&x.by===OL.uid),ow=rounds.filter(x=>x.type==="win"&&x.by!==OL.uid),avg=a=>a.length?(a.reduce((s,x)=>s+(x.ms||0),0)/a.length/1000):0,max=CAPD[r.diff][1];
+  const mh=host?r.hh:r.gh,oh=host?r.gh:r.hh,mwr=host?r.wh:r.wg,owr=host?r.wg:r.wh,ma=avg(mw),oa=avg(ow);
+  const why=r.reason==="draw"?"У обоих закончились сердца":r.reason==="left"?(win?"Соперник вышел из матча":"Вы вышли из матча"):(win?"У соперника закончились сердца":"У вас закончились сердца");
+  const bar=(a,b)=>{const t=(a+b)||1;return`<div class="rbr"><i style="width:${a/t*50}%"></i></div>`};
+  const row=(l,a,b,ta,tb)=>{const t=(a+b)||1;return`<div class="rsr"><b>${ta}</b><div><div class="mut sm" style="text-align:center">${l}</div><div class="rbr"><i style="width:${a/t*100}%"></i><i style="width:${b/t*100}%"></i></div></div><b>${tb}</b></div>`};
+  const rc=draw?"#9aa0b4":win?"#ffd166":"#ff4d6a",ov=document.createElement("div");ov.className="rep";
+  ov.innerHTML=`<div><div class="rban" style="--rc:${rc}"><div class="mut sm">🏛️ Столицы · ${CAPD[r.diff][0]}</div><h1>${draw?"НИЧЬЯ":win?"ПОБЕДА":"ПОРАЖЕНИЕ"}</h1><div class="mut">${why}</div></div>
+<div class="rpl"><div class="rpc ${win?"w":""}"><div>${capMe()}</div><div class="rsc">${mw.length}</div><div class="mut sm">верных · ❤️ ${mh}/${max}</div></div><div class="rpc ${!win&&!draw?"w":""}"><div>${pnick(op.username,op.prem)}</div><div class="rsc">${ow.length}</div><div class="mut sm">верных · ❤️ ${oh}/${max}</div></div></div>
+<div class="rst">${row("Верных ответов",mw.length,ow.length,mw.length,ow.length)}${row("Неверных ответов",mwr,owr,mwr,owr)}${row("Среднее время ответа",ma?1/ma:0,oa?1/oa:0,ma?ma.toFixed(1)+" с":"—",oa?oa.toFixed(1)+" с":"—")}${row("Сердец осталось",mh,oh,mh,oh)}</div>
+<h3 style="margin:14px 0 8px">Раунды</h3>${rounds.length?rounds.map((x,i)=>`<div class="rrow" style="--i:${i}">${fimg(x.iso,"ifl")}<div class="sp"><b>${html(x.cap)}</b><div class="mut sm">${html(capName(x.iso))} · раунд ${x.round}</div></div><span class="rch ${x.type==="win"?(x.by===OL.uid?"g":"b"):"n"}">${x.type==="win"?(x.by===OL.uid?"✓ Вы":"✗ Соперник")+" · "+((x.ms||0)/1000).toFixed(1)+" с":x.type==="skip"?"⏭ Пропуск −1 ❤️":"⏱ Время вышло"}</span></div>`).join(""):`<p class="mut">Ни один раунд не был завершён.</p>`}
+<div class="row" style="margin-top:14px"><button class="pri sp" id="ce1">К друзьям</button><button id="ce2">В меню</button></div></div>`;document.body.append(ov);
+  $("#ce1").onclick=()=>{ov.remove();go("friends")};$("#ce2").onclick=()=>{ov.remove();go("menu")}}
+async function capOnInvite(m){if(!m||m.status!=="waiting"||!m.invited||OL.seen.has(m.id))return;OL.seen.add(m.id);
+  if(CAP.m&&CAP.m.row&&CAP.m.row.status==="playing"){try{await olRpc("cg_cap_decline",{p_id:m.id})}catch(e){}return}
+  let h=null;try{({data:h}=await OL.sb.from("cg_profiles").select("username").eq("id",m.host).maybeSingle())}catch(e){}
+  const ov=document.createElement("div");ov.className="ov";ov.innerHTML=`<div class="card"><h3>Приглашение: Столицы</h3><p><b>${html(h?h.username:"Игрок")}</b> зовёт вас сыграть. ${CAPD[m.diff][0]}, ${CAPD[m.diff][1]} ❤️.</p><div class="row"><button class="pri sp" id="cvy">Принять</button><button id="cvn">Отклонить</button></div></div>`;document.body.append(ov);play("turn");
+  $("#cvn").onclick=async()=>{ov.remove();try{await olRpc("cg_cap_decline",{p_id:m.id})}catch(e){}};
+  $("#cvy").onclick=async()=>{ov.remove();try{if(await olRpc("cg_cap_accept",{p_id:m.id}))await capOpen(m.id);else toast("Приглашение уже недействительно",1)}catch(e){toast(olErr(e),1)}};
+  setTimeout(()=>{if(ov.isConnected)ov.remove()},9*60e3)}
 
 applyTheme();go("menu");
 function intro(){const G=window.GEO;if(!G||S.rm||matchMedia("(prefers-reduced-motion:reduce)").matches)return;
@@ -781,4 +905,18 @@ const ov=document.createElement("div");ov.className="ov pth";ov.innerHTML=`<div 
 window.cgGrantPremium=grant;
 try{go(cur||"menu")}catch(e){console.error(e)}
 })();
-</script></body></html>
+</script><style id="fitfix">
+/* персонаж всегда вписан в высоту своей сцены и не вылезает за рамки */
+.stage.hs{height:470px;min-height:470px;display:flex;justify-content:center;align-items:flex-end;padding:44px 0 36px;overflow:hidden!important}
+.card.prem .pst .stage.hs{height:340px;min-height:340px;padding:40px 0 34px}
+.stage.hs .fg{height:100%!important;width:auto!important;max-width:100%!important;aspect-ratio:3/5!important;max-height:100%}
+.stage.hs .fg canvas{width:100%!important;height:100%!important;display:block}
+.stage.hs .fg::before,.stage.hs .fg::after{display:none!important}
+.stage.hs{background:radial-gradient(60% 50% at 50% 100%,color-mix(in srgb,var(--ac) 22%,transparent),transparent 70%)!important}
+.stage.hs::after{display:block!important;content:"";position:absolute;left:12%;right:12%;bottom:14px;height:26px;border-radius:50%;border:1.5px solid rgba(255,255,255,.28);box-shadow:0 0 16px color-mix(in srgb,var(--ac) 45%,transparent);background:radial-gradient(closest-side,color-mix(in srgb,var(--ac) 40%,transparent),transparent 72%);pointer-events:none}
+.home{min-width:0}.home>*{min-width:0}
+.stage .fg canvas{max-width:100%}
+.card.prem{overflow:hidden}
+.card.prem .pq{top:8px;z-index:3}
+</style>
+</body></html>
