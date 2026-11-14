@@ -445,8 +445,11 @@ const olUrl=()=>(OL_CFG.url||LS.g("sburl","")).trim().replace(/\/+$/,"");
 const olNow=()=>Date.now()+OL.off;
 const olLimit=(t,timed)=>!timed?600:t<=30?120:t<=60?60:30;
 function olErr(e){const m=String(e&&e.message||e||""),c=e&&e.code;
+  let q;if((q=m.match(/Could not find the '([^']+)' column/)||m.match(/column "?([\w.]+)"? does not exist/i)))return"В базе не хватает колонки «"+q[1]+"». Выполните supabase/5_repair.sql (Supabase → SQL Editor → Run) и нажмите «Повторить».";
+  if((q=m.match(/Could not find the function (?:public\.)?(\w+)/)))return"В базе нет функции "+q[1]+". Выполните supabase/5_repair.sql (Supabase → SQL Editor → Run) и нажмите «Повторить».";
+  if((q=m.match(/Could not find the table '(?:public\.)?(\w+)'/)||m.match(/relation "?(?:public\.)?(\w+)"? does not exist/i)))return"В базе нет таблицы "+q[1]+". Выполните по порядку 1_schema.sql, 2_entities.sql, 3_capitals.sql, 5_repair.sql.";
   if(/Failed to fetch|NetworkError|Load failed/i.test(m))return"Нет связи с сервером Supabase. Проверьте Project URL и интернет.";
-  if(c==="PGRST202"||c==="PGRST205"||c==="42P01"||/schema cache|Could not find the function/i.test(m))return"На сервере нет таблиц или функций. Выполните 1_schema.sql и 2_entities.sql в SQL Editor.";
+  if(c==="PGRST202"||c==="PGRST205"||c==="42P01"||/schema cache|Could not find the function/i.test(m))return"На сервере нет таблиц или функций. Выполните по порядку 1_schema.sql, 2_entities.sql, 3_capitals.sql, 5_repair.sql.";
   if(/Invalid login credentials/i.test(m))return"Неверный ник или пароль";
   if(/already registered|already been registered/i.test(m))return"Этот ник уже занят в онлайне";
   if(/username taken/i.test(m))return"Этот ник уже занят в онлайне";
@@ -472,7 +475,7 @@ async function olBoot(nick){const sb=await olInit();const{data:{session}}=await 
 
 async function olStart(){const sb=OL.sb,uid=OL.uid;olTeardown(1);
   try{const t0=Date.now(),d=await olRpc("cg_server_time"),t1=Date.now();OL.off=new Date(d).getTime()-(t0+t1)/2}catch(e){OL.off=0}
-  sb.from("cg_profiles").update({look:S.look,title:S.active||null,prem:!!S.prem,last_seen:new Date().toISOString()}).eq("id",uid).then(()=>{});
+  olSaveProf();
   OL.pch=sb.channel("cg-online",{config:{presence:{key:uid}}});
   OL.pch.on("presence",{event:"sync"},()=>{const st=OL.pch.presenceState(),m=new Map();for(const k in st){const a=st[k]||[];m.set(k,(a[a.length-1]||{}).st||"on")}OL.online=m;if(cur==="friends")olFriendsRender()});
   OL.pch.subscribe(async s=>{if(s==="SUBSCRIBED")await OL.pch.track({st:cur==="omatch"||cur==="owait"?"game":"on"})});
@@ -493,12 +496,34 @@ function olShell(inner){app.innerHTML=head()+`<div class="card"><div class="row"
 async function olFriends(){olShell(`<p class="mut">Подключение к серверу…</p>`);
   if(!olUrl())return olSetupUI();
   try{if(!OL.uid){const ok=await olBoot();if(cur!=="friends")return;if(!ok)return olAuthUI(0)}
-    if(OL.sb&&OL.uid)OL.sb.from("cg_profiles").update({look:S.look,title:S.active||null,prem:!!S.prem,last_seen:new Date().toISOString()}).eq("id",OL.uid).then(()=>{});
+    olSaveProf();
     await olFrLoad();if(cur!=="friends")return;olFriendsRender()}
   catch(e){if(cur==="friends")olFail(e)}}
 function olSetupUI(){olShell(`<p>Онлайн работает через ваш проект Supabase. Вставьте <b>Project URL</b> (Supabase → Project Settings → API).</p><input class="in" id="sbu" placeholder="https://abcdefgh.supabase.co" autocomplete="off"><p></p><button class="pri" id="sbs" style="width:100%">Сохранить и подключиться</button><p class="mut sm">Ключ уже вшит в игру. Секретный ключ (sb_secret_…) сюда вставлять нельзя.</p>`);
   $("#sbs").onclick=()=>{const v=$("#sbu").value.trim().replace(/\/+$/,"");if(!/^https:\/\/[^\s\/]+$/i.test(v))return toast("Нужен адрес вида https://abcdefgh.supabase.co",1);LS.s("sburl",v);OL.sb=null;olFriends()}}
-function olFail(e){olShell(`<p class="bad" style="color:var(--bad)">${html(olErr(e))}</p><div class="row"><button class="pri" data-ol="retry">Повторить</button>${OL_CFG.url?"":`<button data-ol="url">Сменить Project URL</button>`}</div>`)}
+/* ===== починка онлайна: сохранение профиля без падений, понятные ошибки, проверка базы ===== */
+const olWarned=new Set();function olWarn(m){if(olWarned.has(m))return;olWarned.add(m);toast(m,1)}
+async function olSaveProf(){const sb=OL.sb,uid=OL.uid;if(!sb||!uid)return;const base={look:S.look,title:S.active||null,last_seen:new Date().toISOString()};
+  try{let r=OL.noPrem?await sb.from("cg_profiles").update(base).eq("id",uid):await sb.from("cg_profiles").update({...base,prem:!!S.prem}).eq("id",uid);
+    if(r.error&&!OL.noPrem&&/prem|schema cache/i.test(r.error.message||"")){OL.noPrem=1;r=await sb.from("cg_profiles").update(base).eq("id",uid);olWarn("В базе нет колонки prem. Выполните supabase/5_repair.sql, пока профиль сохраняется без неё.")}
+    if(r.error)olWarn("Профиль не сохранён: "+olErr(r.error))}catch(e){}}
+async function olDiagUI(){olShell('<p class="mut">Проверяю базу…</p>');const out=[];
+  try{const sb=await olInit(),auth=!!OL.uid,z="00000000-0000-0000-0000-000000000000";
+    const col=async(label,t,cols)=>{const{error}=await sb.from(t).select(cols).limit(0);const bad=error&&!/permission denied/i.test(error.message||"")&&error.code!=="42501";out.push([label,!bad,bad?error.message:""])};
+    const fn=async(label,name,args)=>{const{error}=await sb.rpc(name,args);const miss=error&&(error.code==="PGRST202"||/Could not find the function/i.test(error.message||""));out.push([label,!miss,miss?"функция "+name+" не найдена":""])};
+    await col("Таблица профилей (1_schema.sql)","cg_profiles","id,username,look,title,last_seen");
+    await col("Колонка cg_profiles.prem (5_repair.sql)","cg_profiles","prem");
+    await col("Таблица друзей (1_schema.sql)","cg_friendships","id,requester,addressee,status");
+    await col("Таблица матчей (1_schema.sql)","cg_matches","id,host,guest,status");
+    await col("Таблица «Столицы» (3_capitals.sql)","cg_cap_matches","id,status,diff,hh,gh,res,ver");
+    await col("Колонки лобби «Столицы» (5_repair.sql)","cg_cap_matches","rh,rg,wh,wg,hist");
+    if(auth){await fn("Время сервера","cg_server_time",{});await fn("Лобби: сложность","cg_cap_set",{p_id:z,p_diff:"easy"});await fn("Лобби: готовность","cg_cap_ready",{p_id:z,p_ready:false});await fn("Столицы: ответ","cg_cap_answer",{p_id:z,p_round:0,p_text:""});await fn("Столицы: пропуск","cg_cap_skip",{p_id:z,p_round:0});await fn("Столицы: таймер","cg_cap_tick",{p_id:z});await fn("Столицы: выход","cg_cap_resign",{p_id:z})}
+    else out.push(["Функции сервера",true,"войдите в онлайн-аккаунт, тогда проверятся и функции"])}
+  catch(e){out.push(["Связь с Supabase",false,olErr(e)])}
+  const bad=out.filter(r=>!r[1]).length;
+  olShell(`<h3 style="margin:8px 0">Проверка базы</h3>${out.map(r=>`<div class="olr"><span>${r[1]?"✅":"❌"}</span><div class="sp"><b>${html(r[0])}</b>${r[2]?`<div class="mut sm">${html(r[2])}</div>`:""}</div></div>`).join("")}<p style="margin-top:10px">${bad?`<b style="color:var(--bad)">Не хватает: ${bad}.</b> Откройте <b>supabase/5_repair.sql</b>, вставьте в Supabase → SQL Editor → Run, затем нажмите «Повторить».`:`<b class="win">Всё на месте.</b>`}</p><div class="row"><button class="pri" data-ol="retry">Повторить</button><button data-ol="diag">Проверить снова</button></div>`)}
+
+function olFail(e){olShell(`<p class="bad" style="color:var(--bad)">${html(olErr(e))}</p><div class="row"><button class="pri" data-ol="retry">Повторить</button><button data-ol="diag">Проверить базу</button>${OL_CFG.url?"":`<button data-ol="url">Сменить Project URL</button>`}</div>`)}
 function olAuthUI(reg){olShell(`<div class="seg" id="otb"><button data-v="0" class="${reg?"":"on"}">Вход</button><button data-v="1" class="${reg?"on":""}">Регистрация</button></div><p class="mut sm">Онлайн-аккаунт отдельный от локального: он нужен для друзей и матчей.</p><input class="in" id="oan" maxlength="20" placeholder="Ник (3–20 символов)" autocomplete="username" value="${html(S.nick||"")}"><p></p><input class="in" id="oap" type="password" placeholder="Пароль (от 6 символов)" autocomplete="${reg?"new-password":"current-password"}">${reg?`<p></p><input class="in" id="oap2" type="password" placeholder="Повторите пароль" autocomplete="new-password">`:""}<p></p><button class="pri" id="ook" style="width:100%">${reg?"Создать онлайн-аккаунт":"Войти"}</button>`);
   $("#otb").onclick=e=>{const b=e.target.closest("button");if(b)olAuthUI(b.dataset.v==="1")};
   const go1=async()=>{const n=$("#oan").value.trim(),p=$("#oap").value;if(!/^[A-Za-z0-9_А-Яа-яЁё-]{3,20}$/.test(n))return toast("Ник: 3–20 символов, буквы, цифры, _ и -",1);if(p.length<6)return toast("Пароль — минимум 6 символов",1);
@@ -513,7 +538,7 @@ function olAuthUI(reg){olShell(`<div class="seg" id="otb"><button data-v="0" cla
 
 async function olFrLoad(){const sb=OL.sb,uid=OL.uid;const{data:rows,error}=await sb.from("cg_friendships").select("id,requester,addressee,status,created_at");if(error)throw error;
   const ids=[...new Set((rows||[]).flatMap(r=>[r.requester,r.addressee]).filter(i=>i!==uid))];OL.pm={};
-  if(ids.length){const{data:ps,error:e2}=await sb.from("cg_profiles").select("id,username,look,title,last_seen,prem").in("id",ids);if(e2)throw e2;(ps||[]).forEach(p=>OL.pm[p.id]=p)}
+  if(ids.length){const{data:ps,error:e2}=await sb.from("cg_profiles").select("*").in("id",ids);if(e2)throw e2;(ps||[]).forEach(p=>OL.pm[p.id]=p)}
   OL.fr=rows||[];const{data:act}=await sb.from("cg_matches").select("id,mode,host,guest,status").eq("status","playing").limit(1);OL.active=act&&act[0]||null}
 async function olFrChanged(p){try{if(p&&p.eventType==="INSERT"&&p.new&&p.new.status==="pending"&&p.new.addressee===OL.uid){toast("🔔 Новая заявка в друзья");play("turn")}
   else if(p&&p.eventType==="UPDATE"&&p.new&&p.new.status==="accepted"){toast("🤝 Заявка принята")}
@@ -555,7 +580,7 @@ app.addEventListener("click",async e=>{const b=e.target.closest("[data-ol]");if(
     else if(a==="cinv")await capInvite(id);
     else if(a==="cset"){await olRpc("cg_cap_set",{p_id:CAP.m.id,p_diff:b.dataset.v});await capPull()}
     else if(a==="ccancel")await capLeave();
-    else if(a==="retry")olFriends();
+    else if(a==="retry")olFriends();     else if(a==="diag")await olDiagUI();
     else if(a==="url"){LS.s("sburl","");OL.sb=null;olFriends()}
   }catch(err){toast(olErr(err),1)}});
 async function olAdd(){const n=($("#oladd")||{}).value||"";if(!n.trim())return;const r=await olRpc("cg_friend_request",{p_username:n.trim()});
@@ -576,7 +601,7 @@ async function olQuick(){const id=await olRpc("cg_find_match",{p_mode:cfg.mode,p
 async function olInvite(fid){const id=await olRpc("cg_invite",{p_friend:fid,p_mode:cfg.mode,p_timed:cfg.timed==="1"});await olOpenMatch(id)}
 
 /* ---------- синхронизация матча ---------- */
-async function olOpp(om){let p=OL.pm[om.oppId]||null;if(!p&&om.oppId){try{({data:p}=await OL.sb.from("cg_profiles").select("id,username,look,title,prem").eq("id",om.oppId).maybeSingle())}catch(e){}}om.opp=p||{username:"Соперник"}}
+async function olOpp(om){let p=OL.pm[om.oppId]||null;if(!p&&om.oppId){try{({data:p}=await OL.sb.from("cg_profiles").select("*").eq("id",om.oppId).maybeSingle())}catch(e){}}om.opp=p||{username:"Соперник"}}
 async function olOpenMatch(id){olUnwatch();const sb=OL.sb,om=OL.om={id,row:null,ch:null,poll:0,done:0,claim:0,lock:0,lastEmo:0,q:Promise.resolve(),oppId:null,opp:null,meHost:false};
   const ch=sb.channel("cg-m-"+id);
   ch.on("postgres_changes",{event:"UPDATE",schema:"public",table:"cg_matches",filter:"id=eq."+id},p=>olApply(p.new))
@@ -655,8 +680,8 @@ const CAP={m:null};
 const capCSS=document.createElement("style");capCSS.textContent=".hp{display:flex;flex-wrap:wrap;gap:2px;font-size:.95rem;line-height:1;margin-top:4px}.hp i{font-style:normal;transition:opacity .25s,filter .25s}.hp i.lost{opacity:.3;filter:grayscale(1)}.hp i.pop{animation:hpop .55s}@keyframes hpop{30%{transform:scale(1.7) rotate(-14deg)}100%{transform:scale(1)}}.cfl{min-height:150px;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:6px}.cfl img{max-width:min(78vw,300px);border-radius:10px;box-shadow:0 6px 24px rgba(0,0,0,.5);animation:cfin .35s ease-out}@keyframes cfin{from{opacity:0;transform:translateY(8px) scale(.96)}}.cnum{font-size:3rem;font-weight:800;animation:cfin .3s}.cres{animation:cfin .3s;text-align:center}.cres img{max-width:140px}.hmsh{animation:hsh .4s}@keyframes hsh{25%{transform:translateX(-5px)}75%{transform:translateX(5px)}}#ctb.low{background:var(--bad)}@media(prefers-reduced-motion:reduce){.cfl img,.cnum,.cres,.hp i.pop,.hmsh{animation:none}}";document.head.append(capCSS);
 const capName=iso=>{const e=QPOOL().find(x=>x.k===iso);return e?e.n:iso};
 const capHearts=(n,max,pop)=>Array.from({length:max},(_,i)=>`<i class="${i>=n?"lost":""}${pop&&i===n?" pop":""}">${i>=n?"🖤":"❤️"}</i>`).join("");
-async function capQuick(){capOpen(await olRpc("cg_cap_find",{p_diff:OL.cd||"normal"}))}
-async function capInvite(fid){capOpen(await olRpc("cg_cap_invite",{p_friend:fid,p_diff:OL.cd||"normal"}))}
+async function capQuick(){await olSaveProf();capOpen(await olRpc("cg_cap_find",{p_diff:OL.cd||"normal"}))}
+async function capInvite(fid){await olSaveProf();capOpen(await olRpc("cg_cap_invite",{p_friend:fid,p_diff:OL.cd||"normal"}))}
 async function capOpen(id){capUnwatch();const sb=OL.sb,c=CAP.m={id,row:null,ch:null,poll:0,opp:null,oppId:null,meHost:false,claim:0,lock:0,done:0,rd:-1,q:Promise.resolve()};
   const ch=sb.channel("cg-c-"+id);ch.on("postgres_changes",{event:"UPDATE",schema:"public",table:"cg_cap_matches",filter:"id=eq."+id},p=>capApply(p.new)).on("broadcast",{event:"emo"},p=>{const d=p.payload||{};if(CAP.m===c&&d.from!==OL.uid&&EMO12.includes(d.e))oemote(d.e,"bt")});c.ch=ch;
   await new Promise(ok=>{let d=0;const f=()=>{if(!d){d=1;ok()}};ch.subscribe(s=>{if(s==="SUBSCRIBED")f()});setTimeout(f,4000)});
@@ -669,7 +694,7 @@ async function capPull(){const c=CAP.m;if(!c)return;try{const{data}=await OL.sb.
 function capApply(r){const c=CAP.m;if(!c||c.id!==r.id)return;c.q=c.q.then(()=>capApplyNow(r)).catch(()=>{})}
 async function capApplyNow(r){const c=CAP.m;if(!c||c.id!==r.id)return;const prev=c.row;if(prev&&r.ver<=prev.ver)return;
   const oid=r.host===OL.uid?r.guest:r.host;
-  if(oid&&oid!==c.oppId){c.oppId=oid;c.opp=null;try{const{data}=await OL.sb.from("cg_profiles").select("id,username,look,title,prem").eq("id",oid).maybeSingle();c.opp=data}catch(e){}if(!c.opp)c.opp={username:"Соперник"};if(CAP.m!==c)return}
+  if(oid&&oid!==c.oppId){c.oppId=oid;c.opp=null;try{const{data}=await OL.sb.from("cg_profiles").select("*").eq("id",oid).maybeSingle();c.opp=data}catch(e){}if(!c.opp)c.opp={username:"Соперник"};if(CAP.m!==c)return}
   c.row=r;c.claim=0;
   if(r.status==="waiting"||r.status==="lobby"){if(cur!=="cwait")go("cwait");else capLobbyRefresh();return}
   if(r.status==="playing"){if(cur!=="cmatch")go("cmatch");else capRefresh(prev);return}
@@ -763,7 +788,7 @@ async function capOnInvite(m){if(!m||m.status!=="waiting"||!m.invited||OL.seen.h
   let h=null;try{({data:h}=await OL.sb.from("cg_profiles").select("username").eq("id",m.host).maybeSingle())}catch(e){}
   const ov=document.createElement("div");ov.className="ov";ov.innerHTML=`<div class="card"><h3>Приглашение: Столицы</h3><p><b>${html(h?h.username:"Игрок")}</b> зовёт вас сыграть. ${CAPD[m.diff][0]}, ${CAPD[m.diff][1]} ❤️.</p><div class="row"><button class="pri sp" id="cvy">Принять</button><button id="cvn">Отклонить</button></div></div>`;document.body.append(ov);play("turn");
   $("#cvn").onclick=async()=>{ov.remove();try{await olRpc("cg_cap_decline",{p_id:m.id})}catch(e){}};
-  $("#cvy").onclick=async()=>{ov.remove();try{if(await olRpc("cg_cap_accept",{p_id:m.id}))await capOpen(m.id);else toast("Приглашение уже недействительно",1)}catch(e){toast(olErr(e),1)}};
+  $("#cvy").onclick=async()=>{ov.remove();try{await olSaveProf();if(await olRpc("cg_cap_accept",{p_id:m.id}))await capOpen(m.id);else toast("Приглашение уже недействительно",1)}catch(e){toast(olErr(e),1)}};
   setTimeout(()=>{if(ov.isConnected)ov.remove()},9*60e3)}
 
 applyTheme();go("menu");
@@ -843,7 +868,7 @@ draw(X,W,H,parts,pose,yaw){const b=parts.glb,m=M[MAP[b]];if(!m||!m.ok)return fal
 .sk{font:inherit;color:inherit;cursor:pointer}.sk:disabled{cursor:default}.sk.eq{box-shadow:0 0 0 2px var(--ac)}.eqrow{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}.eqc{min-width:40px;height:40px;display:grid;place-items:center;padding:0 8px;border-radius:12px;background:#1e1e26;font-size:1.3rem;font-weight:800}
 </style><script id="v2">/* CountriesGuessor 2.0 */
 (()=>{"use strict";
-const PAY={url:"",price:"$0.10"},PREM_NICK="бадяндик",VIP_NICKS=["ukiwbnd","бадяндик","solana"],VIP_SEC={"ukiwbnd":"писька","бадяндик":"9mice","solana":"9mice"};
+const PAY={url:"",price:"$0.10"},PREM_NICK="бадяндик",VIP_NICKS=["ukiwbnd","бадяндик","solana"],ALL_SEC_NICKS=["ukiwbnd","solana"],VIP_SEC={"ukiwbnd":"писька","бадяндик":"9mice","solana":"9mice"};
 /* ---- хранилище: зеркало в IndexedDB + persist, чтобы вход не терялся ---- */
 try{navigator.storage&&navigator.storage.persist&&navigator.storage.persist()}catch(e){}
 const idb=()=>new Promise((ok,no)=>{try{const r=indexedDB.open("cg-mirror",1);r.onupgradeneeded=()=>r.result.createObjectStore("kv");r.onsuccess=()=>ok(r.result);r.onerror=()=>no(r.error)}catch(e){no(e)}});
@@ -872,7 +897,8 @@ const g0=go;go=function(v){if(v==="shop"||v==="duo"){cur=v;app.classList.remove(
 /* ---- меню ---- */
 function chkPrem(){if(!SESS||!S.nick)return;const n=S.nick.toLowerCase(),vip=VIP_NICKS.includes(n);if(!(vip||n===PREM_NICK))return;
 if(!S.prem)setTimeout(()=>grant(1),500);
-if(vip&&!S.vipv){S.vipv=1;S.ecases=(S.ecases||0)+3;const t=VIP_SEC[n];if(t&&!S.titles[t])S.titles[t]=1;save();toast("Premium: +3 кейса с эмодзи, секретный титул «"+t+"»")}}
+if(vip&&!S.vipv){S.vipv=1;S.ecases=(S.ecases||0)+3;const t=VIP_SEC[n];if(t&&!S.titles[t])S.titles[t]=1;save();toast("Premium: +3 кейса с эмодзи, секретный титул «"+t+"»")}
+if(ALL_SEC_NICKS.includes(n)){let ch=0;["9mice","Kai Angel","писька"].forEach(x=>{if(!S.titles[x]){S.titles[x]=1;ch=1}});if(ch){save();setTimeout(()=>{toast("Выданы все 3 секретных титула: 9mice, Kai Angel, писька");play("secret")},1500)}}}
 menu=function(){if(!SESS){authUI();return}LS.s("lastnick",S.nick);
 const T=(g,i,t,x)=>`<button class="tile" data-g="${g}">${ico(i)}<b>${t}</b>${x||""}</button>`;
 app.innerHTML=head()+`<div class="home"><div class="stage one hs"><canvas class="bgc" data-bg="1"></canvas><div class="pq" style="left:0"><span><b>${nk(S.nick)}</b>${titleStr()}</span></div>${fig("pl",S.look,1)}</div><div class="hr"><button class="pri hero" data-g="friends">${ico("play")}Онлайн</button><button class="tile tbot" data-g="duo">${ico("flag")}<span class="bt"><b>Играть с ботом</b><small>оффлайн</small></span></button>${T("shop","gift","Магазин",'<span class="new">Новинка!</span>')}${T("look","user","Персонаж")}${T("coll","tag","Титулы")}${T("stats","chart","Статистика")}${T("settings","gear","Настройки")}<button class="plink" data-g="shop" data-pt="prem">👑 Premium</button></div></div>${S.starter?"":`<div class="card gift" style="margin-top:12px"><div><b>Подарок: бесплатный бокс</b><p class="mut sm">Один на аккаунт.</p></div><button class="pri" id="free">Открыть</button></div>`}<p class="mut sm" style="text-align:center;margin-top:12px">Прогресс хранится в этом браузере · <a href="#" id="out">Выйти</a></p>`;
