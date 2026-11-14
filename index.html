@@ -445,11 +445,11 @@ const olUrl=()=>(OL_CFG.url||LS.g("sburl","")).trim().replace(/\/+$/,"");
 const olNow=()=>Date.now()+OL.off;
 const olLimit=(t,timed)=>!timed?600:t<=30?120:t<=60?60:30;
 function olErr(e){const m=String(e&&e.message||e||""),c=e&&e.code;
-  let q;if((q=m.match(/Could not find the '([^']+)' column/)||m.match(/column "?([\w.]+)"? does not exist/i)))return"В базе не хватает колонки «"+q[1]+"». Выполните supabase/5_repair.sql (Supabase → SQL Editor → Run) и нажмите «Повторить».";
-  if((q=m.match(/Could not find the function (?:public\.)?(\w+)/)))return"В базе нет функции "+q[1]+". Выполните supabase/5_repair.sql (Supabase → SQL Editor → Run) и нажмите «Повторить».";
-  if((q=m.match(/Could not find the table '(?:public\.)?(\w+)'/)||m.match(/relation "?(?:public\.)?(\w+)"? does not exist/i)))return"В базе нет таблицы "+q[1]+". Выполните по порядку 1_schema.sql, 2_entities.sql, 3_capitals.sql, 5_repair.sql.";
+  let q;if((q=m.match(/Could not find the '([^']+)' column/)||m.match(/column "?([\w.]+)"? does not exist/i)))return"В базе не хватает колонки «"+q[1]+"». Выполните supabase/capitals_setup.sql (Supabase → SQL Editor → Run) и нажмите «Повторить».";
+  if((q=m.match(/Could not find the function (?:public\.)?(\w+)/)))return"В базе нет функции "+q[1]+". Выполните supabase/capitals_setup.sql (Supabase → SQL Editor → Run) и нажмите «Повторить».";
+  if((q=m.match(/Could not find the table '(?:public\.)?(\w+)'/)||m.match(/relation "?(?:public\.)?(\w+)"? does not exist/i)))return"В базе нет таблицы "+q[1]+". Выполните по порядку 1_schema.sql, 2_entities.sql, capitals_setup.sql, capitals_setup.sql.";
   if(/Failed to fetch|NetworkError|Load failed/i.test(m))return"Нет связи с сервером Supabase. Проверьте Project URL и интернет.";
-  if(c==="PGRST202"||c==="PGRST205"||c==="42P01"||/schema cache|Could not find the function/i.test(m))return"На сервере нет таблиц или функций. Выполните по порядку 1_schema.sql, 2_entities.sql, 3_capitals.sql, 5_repair.sql.";
+  if(c==="PGRST202"||c==="PGRST205"||c==="42P01"||/schema cache|Could not find the function/i.test(m))return"На сервере нет таблиц или функций. Выполните по порядку 1_schema.sql, 2_entities.sql, capitals_setup.sql, capitals_setup.sql.";
   if(/Invalid login credentials/i.test(m))return"Неверный ник или пароль";
   if(/already registered|already been registered/i.test(m))return"Этот ник уже занят в онлайне";
   if(/username taken/i.test(m))return"Этот ник уже занят в онлайне";
@@ -505,23 +505,23 @@ function olSetupUI(){olShell(`<p>Онлайн работает через ваш
 const olWarned=new Set();function olWarn(m){if(olWarned.has(m))return;olWarned.add(m);toast(m,1)}
 async function olSaveProf(){const sb=OL.sb,uid=OL.uid;if(!sb||!uid)return;const base={look:S.look,title:S.active||null,last_seen:new Date().toISOString()};
   try{let r=OL.noPrem?await sb.from("cg_profiles").update(base).eq("id",uid):await sb.from("cg_profiles").update({...base,prem:!!S.prem}).eq("id",uid);
-    if(r.error&&!OL.noPrem&&/prem|schema cache/i.test(r.error.message||"")){OL.noPrem=1;r=await sb.from("cg_profiles").update(base).eq("id",uid);olWarn("В базе нет колонки prem. Выполните supabase/5_repair.sql, пока профиль сохраняется без неё.")}
+    if(r.error&&!OL.noPrem&&/prem|schema cache/i.test(r.error.message||"")){OL.noPrem=1;r=await sb.from("cg_profiles").update(base).eq("id",uid);olWarn("В базе нет колонки prem. Выполните supabase/capitals_setup.sql, пока профиль сохраняется без неё.")}
     if(r.error)olWarn("Профиль не сохранён: "+olErr(r.error))}catch(e){}}
 async function olDiagUI(){olShell('<p class="mut">Проверяю базу…</p>');const out=[];
   try{const sb=await olInit(),auth=!!OL.uid,z="00000000-0000-0000-0000-000000000000";
     const col=async(label,t,cols)=>{const{error}=await sb.from(t).select(cols).limit(0);const bad=error&&!/permission denied/i.test(error.message||"")&&error.code!=="42501";out.push([label,!bad,bad?error.message:""])};
     const fn=async(label,name,args)=>{const{error}=await sb.rpc(name,args);const miss=error&&(error.code==="PGRST202"||/Could not find the function/i.test(error.message||""));out.push([label,!miss,miss?"функция "+name+" не найдена":""])};
     await col("Таблица профилей (1_schema.sql)","cg_profiles","id,username,look,title,last_seen");
-    await col("Колонка cg_profiles.prem (5_repair.sql)","cg_profiles","prem");
+    await col("Колонка cg_profiles.prem (capitals_setup.sql)","cg_profiles","prem");
     await col("Таблица друзей (1_schema.sql)","cg_friendships","id,requester,addressee,status");
     await col("Таблица матчей (1_schema.sql)","cg_matches","id,host,guest,status");
-    await col("Таблица «Столицы» (3_capitals.sql)","cg_cap_matches","id,status,diff,hh,gh,res,ver");
-    await col("Колонки лобби «Столицы» (5_repair.sql)","cg_cap_matches","rh,rg,wh,wg,hist");
+    await col("Таблица «Столицы» (capitals_setup.sql)","cg_cap_matches","id,status,diff,hh,gh,res,ver");
+    await col("Колонки лобби «Столицы» (capitals_setup.sql)","cg_cap_matches","rh,rg,wh,wg,hist");
     if(auth){await fn("Время сервера","cg_server_time",{});await fn("Лобби: сложность","cg_cap_set",{p_id:z,p_diff:"easy"});await fn("Лобби: готовность","cg_cap_ready",{p_id:z,p_ready:false});await fn("Столицы: ответ","cg_cap_answer",{p_id:z,p_round:0,p_text:""});await fn("Столицы: пропуск","cg_cap_skip",{p_id:z,p_round:0});await fn("Столицы: таймер","cg_cap_tick",{p_id:z});await fn("Столицы: выход","cg_cap_resign",{p_id:z})}
     else out.push(["Функции сервера",true,"войдите в онлайн-аккаунт, тогда проверятся и функции"])}
   catch(e){out.push(["Связь с Supabase",false,olErr(e)])}
   const bad=out.filter(r=>!r[1]).length;
-  olShell(`<h3 style="margin:8px 0">Проверка базы</h3>${out.map(r=>`<div class="olr"><span>${r[1]?"✅":"❌"}</span><div class="sp"><b>${html(r[0])}</b>${r[2]?`<div class="mut sm">${html(r[2])}</div>`:""}</div></div>`).join("")}<p style="margin-top:10px">${bad?`<b style="color:var(--bad)">Не хватает: ${bad}.</b> Откройте <b>supabase/5_repair.sql</b>, вставьте в Supabase → SQL Editor → Run, затем нажмите «Повторить».`:`<b class="win">Всё на месте.</b>`}</p><div class="row"><button class="pri" data-ol="retry">Повторить</button><button data-ol="diag">Проверить снова</button></div>`)}
+  olShell(`<h3 style="margin:8px 0">Проверка базы</h3>${out.map(r=>`<div class="olr"><span>${r[1]?"✅":"❌"}</span><div class="sp"><b>${html(r[0])}</b>${r[2]?`<div class="mut sm">${html(r[2])}</div>`:""}</div></div>`).join("")}<p style="margin-top:10px">${bad?`<b style="color:var(--bad)">Не хватает: ${bad}.</b> Откройте <b>supabase/capitals_setup.sql</b>, вставьте в Supabase → SQL Editor → Run, затем нажмите «Повторить».`:`<b class="win">Всё на месте.</b>`}</p><div class="row"><button class="pri" data-ol="retry">Повторить</button><button data-ol="diag">Проверить снова</button></div>`)}
 
 function olFail(e){olShell(`<p class="bad" style="color:var(--bad)">${html(olErr(e))}</p><div class="row"><button class="pri" data-ol="retry">Повторить</button><button data-ol="diag">Проверить базу</button>${OL_CFG.url?"":`<button data-ol="url">Сменить Project URL</button>`}</div>`)}
 function olAuthUI(reg){olShell(`<div class="seg" id="otb"><button data-v="0" class="${reg?"":"on"}">Вход</button><button data-v="1" class="${reg?"on":""}">Регистрация</button></div><p class="mut sm">Онлайн-аккаунт отдельный от локального: он нужен для друзей и матчей.</p><input class="in" id="oan" maxlength="20" placeholder="Ник (3–20 символов)" autocomplete="username" value="${html(S.nick||"")}"><p></p><input class="in" id="oap" type="password" placeholder="Пароль (от 6 символов)" autocomplete="${reg?"new-password":"current-password"}">${reg?`<p></p><input class="in" id="oap2" type="password" placeholder="Повторите пароль" autocomplete="new-password">`:""}<p></p><button class="pri" id="ook" style="width:100%">${reg?"Создать онлайн-аккаунт":"Войти"}</button>`);
