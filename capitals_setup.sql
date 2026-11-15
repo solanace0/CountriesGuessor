@@ -7,6 +7,11 @@
 
 -- 0. Колонка премиума в профилях (её пишет клиент)
 alter table public.cg_profiles add column if not exists prem boolean not null default false;
+-- права клиента на обновление своего профиля (из-за их отсутствия онлайн писал «профиль не сохранён»)
+do $do$ begin
+  execute 'grant update (look, title, last_seen, prem) on public.cg_profiles to authenticated';
+exception when others then null;
+end $do$;
 
 -- 1. Нормализация ответа: регистр, ё/е, пробелы, дефисы и знаки не важны
 create or replace function public.cg_norm(t text) returns text
@@ -141,7 +146,7 @@ insert into public.cg_capitals (iso, cap, alts) values
   ('TW','Тайбэй','{"Тайбей","Тайпей","Taipei"}')
 on conflict (iso) do update set cap = excluded.cap, alts = excluded.alts;
 
--- 2b. Уровни сложности стран: 1 — самые известные, 2 — средние, 3 — редкие
+-- 2b. Уровни сложности стран: 1 — самые известные (режим «Легко»), 2 — средние, 3 — редкие
 alter table public.cg_capitals add column if not exists tier smallint not null default 2;
 update public.cg_capitals set tier = case
   when iso in ('US','CA','MX','BR','AR','CU','GB','FR','DE','IT','ES','PT','NL','BE','CH','AT','SE','NO','DK','FI','IE','PL','CZ','HU','GR','UA','TR','EG','CN','JP','KR','IN','AU','NZ','IL','TH','VN','ID','RU','IR','CL','CO','PE','VE','IS','PK','PH','NG') then 1
