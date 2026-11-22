@@ -143,15 +143,100 @@ insert into public.cg_capitals (iso, cap, alts) values
   ('EC','Кито','{"Quito"}'),
   ('AU','Канберра','{"Canberra"}'),
   ('NZ','Веллингтон','{"Wellington"}'),
-  ('TW','Тайбэй','{"Тайбей","Тайпей","Taipei"}')
+  ('TW','Тайбэй','{"Тайбей","Тайпей","Taipei"}'),
+  ('AL','Тирана','{"Tirana"}'),
+  ('AD','Андорра-ла-Велья','{"Andorra la Vella","Андорра-ла-Велья"}'),
+  ('BY','Минск','{"Minsk"}'),
+  ('VA','Ватикан','{"Vatican City","Vatican"}'),
+  ('LI','Вадуц','{"Vaduz"}'),
+  ('MT','Валлетта','{"Valletta","Ла-Валлетта"}'),
+  ('SM','Сан-Марино','{"San Marino"}'),
+  ('ME','Подгорица','{"Podgorica"}'),
+  ('AF','Кабул','{"Kabul"}'),
+  ('BH','Манама','{"Manama"}'),
+  ('BN','Бандар-Сери-Бегаван','{"Bandar Seri Begawan"}'),
+  ('BT','Тхимпху','{"Thimphu","Тимпху"}'),
+  ('TL','Дили','{"Dili"}'),
+  ('IQ','Багдад','{"Baghdad"}'),
+  ('KZ','Астана','{"Astana","Нур-Султан","Nur-Sultan"}'),
+  ('KH','Пномпень','{"Phnom Penh"}'),
+  ('QA','Доха','{"Doha"}'),
+  ('CY','Никосия','{"Nicosia"}'),
+  ('LB','Бейрут','{"Beirut"}'),
+  ('MV','Мале','{"Male"}'),
+  ('MN','Улан-Батор','{"Ulaanbaatar","Ulan Bator"}'),
+  ('NP','Катманду','{"Kathmandu"}'),
+  ('OM','Маскат','{"Muscat"}'),
+  ('SA','Эр-Рияд','{"Riyadh","Рияд"}'),
+  ('TM','Ашхабад','{"Ashgabat","Ашгабат"}'),
+  ('LK','Шри-Джаяварденепура-Котте','{"Sri Jayawardenepura Kotte","Коломбо","Colombo","Шри-Джаяварденепура"}'),
+  ('AO','Луанда','{"Luanda"}'),
+  ('BJ','Порто-Ново','{"Porto-Novo","Котону","Cotonou"}'),
+  ('BF','Уагадугу','{"Ouagadougou"}'),
+  ('BI','Гитега','{"Gitega","Бужумбура","Bujumbura"}'),
+  ('GM','Банжул','{"Banjul"}'),
+  ('GW','Бисау','{"Bissau"}'),
+  ('DJ','Джибути','{"Djibouti"}'),
+  ('ZM','Лусака','{"Lusaka"}'),
+  ('ZW','Хараре','{"Harare"}'),
+  ('CV','Прая','{"Praia"}'),
+  ('KE','Найроби','{"Nairobi"}'),
+  ('KM','Морони','{"Moroni"}'),
+  ('LS','Масеру','{"Maseru"}'),
+  ('LR','Монровия','{"Monrovia"}'),
+  ('MR','Нуакшот','{"Nouakchott"}'),
+  ('MZ','Мапуту','{"Maputo"}'),
+  ('NA','Виндхук','{"Windhoek"}'),
+  ('NE','Ниамей','{"Niamey"}'),
+  ('ST','Сан-Томе','{"Sao Tome","São Tomé"}'),
+  ('SC','Виктория','{"Victoria"}'),
+  ('SO','Могадишо','{"Mogadishu"}'),
+  ('SL','Фритаун','{"Freetown"}'),
+  ('TG','Ломе','{"Lome"}'),
+  ('UG','Кампала','{"Kampala"}'),
+  ('CF','Банги','{"Bangui"}'),
+  ('TD','Нджамена','{"N''Djamena","Ndjamena","Нджамена"}'),
+  ('GQ','Малабо','{"Malabo"}'),
+  ('ER','Асмэра','{"Asmara","Асмара"}'),
+  ('SZ','Мбабане','{"Mbabane","Лобамба","Lobamba"}'),
+  ('ZA','Претория','{"Pretoria","Кейптаун","Cape Town","Блумфонтейн","Bloemfontein"}'),
+  ('SS','Джуба','{"Juba"}'),
+  ('AG','Сент-Джонс','{"St. John''s","Saint John''s"}'),
+  ('BB','Бриджтаун','{"Bridgetown"}'),
+  ('BZ','Бельмопан','{"Belmopan"}'),
+  ('HT','Порт-о-Пренс','{"Port-au-Prince"}'),
+  ('GT','Гватемала','{"Guatemala City","Гватемала-Сити"}'),
+  ('HN','Тегусигальпа','{"Tegucigalpa"}'),
+  ('GD','Сент-Джорджес','{"St. George''s","Сент-Джорджс"}'),
+  ('DM','Розо','{"Roseau"}'),
+  ('NI','Манагуа','{"Managua"}'),
+  ('SV','Сан-Сальвадор','{"San Salvador"}'),
+  ('VC','Кингстаун','{"Kingstown"}'),
+  ('KN','Бастер','{"Basseterre"}'),
+  ('LC','Кастри','{"Castries"}'),
+  ('TT','Порт-оф-Спейн','{"Port of Spain"}'),
+  ('GY','Джорджтаун','{"Georgetown"}'),
+  ('SR','Парамарибо','{"Paramaribo"}'),
+  ('VU','Порт-Вила','{"Port Vila"}'),
+  ('KI','Южная Тарава','{"South Tarawa","Тарава"}'),
+  ('MH','Маджуро','{"Majuro"}'),
+  ('FM','Паликир','{"Palikir"}'),
+  ('NR','Ярен','{"Yaren"}'),
+  ('PW','Нгерулмуд','{"Ngerulmud","Мелекеок"}'),
+  ('PG','Порт-Морсби','{"Port Moresby"}'),
+  ('WS','Апиа','{"Apia"}'),
+  ('SB','Хониара','{"Honiara"}'),
+  ('TO','Нукуалофа','{"Nuku''alofa","Nukualofa"}'),
+  ('TV','Фунафути','{"Funafuti"}'),
+  ('FJ','Сува','{"Suva"}')
 on conflict (iso) do update set cap = excluded.cap, alts = excluded.alts;
 
--- 2b. Уровни сложности стран: 1 — самые известные (режим «Легко»), 2 — средние, 3 — редкие
+-- 2b. Уровни сложности стран: 1 — самые известные (Легко), 2 — средние, 3 — редкие (Сложно). Каждая страна в одном уровне.
 alter table public.cg_capitals add column if not exists tier smallint not null default 2;
 update public.cg_capitals set tier = case
-  when iso in ('US','CA','MX','BR','AR','CU','GB','FR','DE','IT','ES','PT','NL','BE','CH','AT','SE','NO','DK','FI','IE','PL','CZ','HU','GR','UA','TR','EG','CN','JP','KR','IN','AU','NZ','IL','TH','VN','ID','RU','IR','CL','CO','PE','VE','IS','PK','PH','NG') then 1
-  when iso in ('TD','ML','GN','CM','SN','CI','GA','MG','MU','RW','BW','MW','TJ','KG','UZ','MK','BA','GE','AM','AZ','MD','LV','EE','LT','SK','SI','HR','RS','LU','MC','BS','JM','PA','CR','DO','PY','BO','EC','UY','BD','KP','TW','LA','MM','SD','LY','TN','DZ','MA','TZ','CD','CG','PS','JO','KW','AE','SY') then 3
-  else 2 end;
+  when iso in ('US','CA','MX','BR','AR','GB','FR','DE','IT','ES','PT','NL','BE','CH','AT','SE','NO','DK','FI','IE','PL','CZ','HU','GR','UA','RU','BY','KZ','TR','EG','CN','JP','KR','IN','AU','TH','VN','CU') then 1
+  when iso in ('CL','CO','PE','VE','UY','PY','BO','EC','IR','IQ','SA','IL','ID','PK','BD','PH','MY','SG','NZ','ZA','NG','KE','ET','MA','DZ','TN','LY','SD','UZ','AZ','GE','AM','RS','HR','SK','SI','BG','RO','LT','LV','EE','IS','LU','MT','CY','LB','JO','AE','QA','KW','SY','AF','NP','LK','MM','KP','TW','MN','GH','SN') then 2
+  else 3 end;
 
 -- 3. Комнаты матчей «Столицы»
 create table if not exists public.cg_cap_matches (
@@ -256,16 +341,16 @@ $$;
 -- убираем старую версию (1 аргумент), чтобы вызовы не конфликтовали
 drop function if exists public.cg_cap_pick(text[]);
 
--- easy: только известные страны (tier 1); normal: все; hard: средние и редкие (tier 2–3)
+-- easy: только самые известные страны (tier 1); normal: все; hard: только редкие (tier 3)
 create or replace function public.cg_cap_pick(u text[], d text default 'normal') returns text
 language sql volatile set search_path = public as $$
   select coalesce(
     (select iso from public.cg_capitals
        where not (iso = any (coalesce(u, '{}'::text[])))
-         and case d when 'easy' then tier = 1 when 'hard' then tier >= 2 else true end
+         and case d when 'easy' then tier = 1 when 'hard' then tier = 3 else true end
        order by random() limit 1),
     (select iso from public.cg_capitals
-       where case d when 'easy' then tier = 1 when 'hard' then tier >= 2 else true end
+       where case d when 'easy' then tier = 1 when 'hard' then tier = 3 else true end
        order by random() limit 1),
     (select iso from public.cg_capitals order by random() limit 1))
 $$;
@@ -567,6 +652,10 @@ from (values
   ('таблица cg_cap_matches', to_regclass('public.cg_cap_matches') is not null),
   ('столицы загружены (больше 100)', (select count(*) from public.cg_capitals) > 100),
   ('столицы с уровнями сложности', exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'cg_capitals' and column_name = 'tier')),
+  ('Легко: 35–60 известных стран', (select count(*) from public.cg_capitals where tier = 1) between 35 and 60),
+  ('Сложно: больше 60 редких стран', (select count(*) from public.cg_capitals where tier = 3) > 60),
+  ('Германия, Украина, Казахстан в Легко', (select count(*) from public.cg_capitals where tier = 1 and iso in ('DE','UA','KZ')) = 3),
+  ('Кот-д''Ивуар в Сложно', exists (select 1 from public.cg_capitals where tier = 3 and iso = 'CI')),
   ('функция cg_cap_pick', to_regprocedure('public.cg_cap_pick(text[],text)') is not null),
   ('функция cg_cap_find', to_regprocedure('public.cg_cap_find(text)') is not null),
   ('функция cg_cap_invite', to_regprocedure('public.cg_cap_invite(uuid,text)') is not null),
